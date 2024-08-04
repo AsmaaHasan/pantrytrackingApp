@@ -1,17 +1,10 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { Box, Stack, Typography, Button, Modal, TextField } from '@mui/material'
-import { firestore } from '../firebase'
-import {
-  collection,
-  doc,
-  getDocs,
-  query,
-  setDoc,
-  deleteDoc,
-  getDoc,
-} from 'firebase/firestore'
+import { useState, useEffect } from 'react';
+import { Box, Stack, Typography, Button, Modal, TextField } from '@mui/material';
+import { firestore } from '../firebase';
+import { collection, doc, getDocs, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import CameraCapture from './CameraCapture'; // Adjust the import path as needed
 
 const style = {
   position: 'absolute',
@@ -26,82 +19,106 @@ const style = {
   display: 'flex',
   flexDirection: 'column',
   gap: 3,
-}
+};
 
 export default function Home() {
-  const [inventory, setInventory] = useState([])
-  const [filteredInventory, setFilteredInventory] = useState([])
-  const [open, setOpen] = useState(false)
-  const [updateOpen, setUpdateOpen] = useState(false)
-  const [itemName, setItemName] = useState('')
-  const [updateItemName, setUpdateItemName] = useState('')
-  const [updateQuantity, setUpdateQuantity] = useState(0)
-  const [searchTerm, setSearchTerm] = useState('')
+  const [inventory, setInventory] = useState([]);
+  const [filteredInventory, setFilteredInventory] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const [itemName, setItemName] = useState('');
+  const [updateItemName, setUpdateItemName] = useState('');
+  const [updateQuantity, setUpdateQuantity] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const updateInventory = async () => {
-    const snapshot = query(collection(firestore, 'inventory'))
-    const docs = await getDocs(snapshot)
-    const inventoryList = []
-    docs.forEach((doc) => {
-      inventoryList.push({ name: doc.id, ...doc.data() })
-    })
-    setInventory(inventoryList)
-    setFilteredInventory(inventoryList)
-  }
+    const snapshot = await getDocs(collection(firestore, 'inventory'));
+    const inventoryList = [];
+    snapshot.forEach((doc) => {
+      inventoryList.push({ id: doc.id, ...doc.data() });
+    });
+    setInventory(inventoryList);
+    setFilteredInventory(inventoryList);
+  };
 
   useEffect(() => {
-    updateInventory()
-  }, [])
+    updateInventory();
+  }, []);
 
   useEffect(() => {
-    const filtered = inventory.filter(item =>
-      item.name.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    setFilteredInventory(filtered)
-  }, [searchTerm, inventory])
+    const filtered = inventory.filter(
+      (item) => item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    setFilteredInventory(filtered);
+  }, [searchTerm, inventory]);
 
   const addItem = async (item) => {
-    const docRef = doc(collection(firestore, 'inventory'), item)
-    const docSnap = await getDoc(docRef)
-    if (docSnap.exists()) {
-      const { quantity } = docSnap.data()
-      await setDoc(docRef, { quantity: quantity + 1 })
-    } else {
-      await setDoc(docRef, { quantity: 1 })
+    if (!item) {
+      console.error('Item name is empty.');
+      return;
     }
-    await updateInventory()
-  }
+
+    try {
+      const docRef = doc(collection(firestore, 'inventory'), item);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const { quantity } = docSnap.data();
+        await setDoc(docRef, { quantity: quantity + 1 }, { merge: true });
+        console.log(`Existing item ${item} updated with new quantity.`);
+      } else {
+        await setDoc(docRef, { name: item, quantity: 1 });
+        console.log(`New item ${item} added to inventory.`);
+      }
+      await updateInventory();
+    } catch (error) {
+      console.error('Error adding item:', error);
+    }
+  };
 
   const removeItem = async (item) => {
-    const docRef = doc(collection(firestore, 'inventory'), item)
-    const docSnap = await getDoc(docRef)
-    if (docSnap.exists()) {
-      const { quantity } = docSnap.data()
-      if (quantity === 1) {
-        await deleteDoc(docRef)
-      } else {
-        await setDoc(docRef, { quantity: quantity - 1 })
+    try {
+      const docRef = doc(collection(firestore, 'inventory'), item);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const { quantity } = docSnap.data();
+        if (quantity === 1) {
+          await deleteDoc(docRef);
+        } else {
+          await setDoc(docRef, { quantity: quantity - 1 }, { merge: true });
+        }
+        console.log(`Item ${item} quantity reduced or removed from inventory.`);
       }
+      await updateInventory();
+    } catch (error) {
+      console.error('Error removing item:', error);
     }
-    await updateInventory()
-  }
+  };
 
-  const handleOpen = () => setOpen(true)
-  const handleClose = () => setOpen(false)
+  const handleOpen = () => setOpen(true);
+  const handleClose = () => setOpen(false);
+
+  const handleCaptureOpen = () => setCaptureOpen(true);
+  const handleCaptureClose = () => setCaptureOpen(false);
 
   const handleUpdateOpen = (item, quantity) => {
-    setUpdateItemName(item)
-    setUpdateQuantity(quantity)
-    setUpdateOpen(true)
-  }
-  const handleUpdateClose = () => setUpdateOpen(false)
+    setUpdateItemName(item);
+    setUpdateQuantity(quantity);
+    setUpdateOpen(true);
+  };
+  const handleUpdateClose = () => setUpdateOpen(false);
 
   const updateItem = async (item, newQuantity) => {
-    const docRef = doc(collection(firestore, 'inventory'), item)
-    await setDoc(docRef, { quantity: newQuantity })
-    await updateInventory()
-    handleUpdateClose()
-  }
+    try {
+      const docRef = doc(collection(firestore, 'inventory'), item);
+      await setDoc(docRef, { quantity: newQuantity }, { merge: true });
+      await updateInventory();
+      handleUpdateClose();
+      console.log(`Item ${item} updated with new quantity.`);
+    } catch (error) {
+      console.error('Error updating item:', error);
+    }
+  };
 
   return (
     <Box
@@ -135,14 +152,25 @@ export default function Home() {
             <Button
               variant="outlined"
               onClick={() => {
-                addItem(itemName)
-                setItemName('')
-                handleClose()
+                addItem(itemName);
+                setItemName('');
+                handleClose();
               }}
             >
               Add
             </Button>
           </Stack>
+        </Box>
+      </Modal>
+
+      <Modal
+        open={captureOpen}
+        onClose={handleCaptureClose}
+        aria-labelledby="capture-modal-title"
+        aria-describedby="capture-modal-description"
+      >
+        <Box sx={style}>
+          <CameraCapture />
         </Box>
       </Modal>
 
@@ -197,6 +225,9 @@ export default function Home() {
       <Button variant="contained" onClick={handleOpen}>
         Add New Item
       </Button>
+      <Button variant="contained" onClick={handleCaptureOpen}>
+        Capture New Item
+      </Button>
       <Box border={'1px solid #333'}>
         <Box
           width="800px"
@@ -211,9 +242,9 @@ export default function Home() {
           </Typography>
         </Box>
         <Stack width="800px" height="300px" spacing={2} overflow={'auto'}>
-          {filteredInventory.map(({ name, quantity }) => (
+          {filteredInventory.map(({ id, name, url, quantity }) => (
             <Box
-              key={name}
+              key={id}
               width="100%"
               minHeight="150px"
               display={'flex'}
@@ -222,8 +253,11 @@ export default function Home() {
               bgcolor={'#f0f0f0'}
               paddingX={5}
             >
+              {url && (
+                <img src={url} alt={name} style={{ height: '100px', marginRight: '20px' }} />
+              )}
               <Typography variant={'h3'} color={'#333'} textAlign={'center'}>
-                {name.charAt(0).toUpperCase() + name.slice(1)}
+                {name ? name.charAt(0).toUpperCase() + name.slice(1) : 'Unnamed Item'}
               </Typography>
               <Typography variant={'h3'} color={'#333'} textAlign={'center'}>
                 Quantity: {quantity}
@@ -239,5 +273,5 @@ export default function Home() {
         </Stack>
       </Box>
     </Box>
-  )
+  );
 }
